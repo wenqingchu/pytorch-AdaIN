@@ -1,4 +1,5 @@
 import torch.nn as nn
+import functools
 
 from function import adaptive_instance_normalization as adain
 from function import calc_mean_std
@@ -91,6 +92,137 @@ vgg = nn.Sequential(
     nn.ReLU()  # relu5-4
 )
 
+# Define a resnet block
+class ResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, use_dropout, use_bias):
+        super(ResnetBlock, self).__init__()
+        self.conv_block = self.build_conv_block(dim, padding_type, norm_layer, use_dropout, use_bias)
+
+    def build_conv_block(self, dim, padding_type, norm_layer, use_dropout, use_bias):
+        conv_block = []
+        p = 0
+        if padding_type == 'reflect':
+            conv_block += [nn.ReflectionPad2d(1)]
+        elif padding_type == 'replicate':
+            conv_block += [nn.ReplicationPad2d(1)]
+        elif padding_type == 'zero':
+            p = 1
+        else:
+            raise NotImplementedError('padding [%s] is not implemented' % padding_type)
+
+        if norm_layer != None:
+            conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p, bias=use_bias),
+                    norm_layer(dim),
+                    nn.ReLU(True)]
+        else:
+            conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p, bias=use_bias),
+                    nn.ReLU(True)]
+        if use_dropout:
+            conv_block += [nn.Dropout(0.5)]
+
+        p = 0
+        if padding_type == 'reflect':
+            conv_block += [nn.ReflectionPad2d(1)]
+        elif padding_type == 'replicate':
+            conv_block += [nn.ReplicationPad2d(1)]
+        elif padding_type == 'zero':
+            p = 1
+        else:
+            raise NotImplementedError('padding [%s] is not implemented' % padding_type)
+        if norm_layer != None:
+            conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p, bias=use_bias),
+                    norm_layer(dim)]
+        else:
+
+            conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p, bias=use_bias)]
+
+        return nn.Sequential(*conv_block)
+
+    def forward(self, x):
+        out = x + self.conv_block(x)
+        return out
+
+class ResnetEncoder(nn.Module):
+    def __init__(self, norm_layer=nn.InstanceNorm2d, use_dropout=False, n_blocks=3, padding_type='reflect'):
+        assert (n_blocks >= 0)
+        super(ResnetEncoder, self).__init__()
+        self.input_nc = 3
+        self.output_nc = 3
+        self.ngf = 64
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        model1 = [nn.ReflectionPad2d(3),
+                 nn.Conv2d(self.input_nc, self.ngf, kernel_size=7, padding=0,
+                           bias=use_bias),
+                 norm_layer(self.ngf),
+                 nn.ReLU(True)]
+
+        n_downsampling = 2
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            model1 += [nn.Conv2d(self.ngf * mult, self.ngf * mult * 2, kernel_size=3,
+                                stride=2, padding=1, bias=use_bias),
+                      norm_layer(self.ngf * mult * 2),
+                      nn.ReLU(True)]
+
+        mult = 2 ** n_downsampling
+        model3 = []
+        for i in range(n_blocks):
+            model3 += [
+                ResnetBlock(self.ngf * mult * 2, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
+                            use_bias=use_bias)]
+
+        self.model1 = nn.Sequential(*model1)
+        self.model3 = nn.Sequential(*model3)
+
+    def forward(self, x):
+        x = self.model1(x)
+        ret = self.model3(x)
+        return ret
+
+
+class ResnetDecoder(nn.Module):
+    def __init__(self, norm_layer=nn.InstanceNorm2d, use_dropout=False, n_blocks=3, padding_type='reflect'):
+        assert (n_blocks >= 0)
+        super(ResnetDecoder, self).__init__()
+        self.input_nc = 3
+        self.output_nc = 3
+        self.ngf = 64
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+
+
+        n_downsampling = 2
+        mult = 2 ** n_downsampling
+        model3 = []
+        for i in range(n_blocks):
+            model3 += [
+                ResnetBlock(self.ngf * mult * 2, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
+                            use_bias=use_bias)]
+
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i) * 2
+            model3 += [nn.ConvTranspose2d(self.ngf * mult, int(self.ngf * mult / 2),
+                                          kernel_size=3, stride=2,
+                                          padding=1, output_padding=1,
+                                          bias=use_bias),
+                       norm_layer(int(self.ngf * mult / 2)),
+                       nn.ReLU(True)]
+        model3 += [nn.ReflectionPad2d(3)]
+        model3 += [nn.Conv2d(self.ngf * 2, self.output_nc, kernel_size=7, padding=0)]
+        model3 += [nn.Tanh()]
+
+        self.model3 = nn.Sequential(*model3)
+
+    def forward(self, x):
+        ret = self.model3(x)
+        return ret
+
 
 class Net(nn.Module):
     def __init__(self, encoder, decoder):
@@ -101,6 +233,8 @@ class Net(nn.Module):
         self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
         self.enc_4 = nn.Sequential(*enc_layers[18:31])  # relu3_1 -> relu4_1
         self.decoder = decoder
+        self.resnetdecoder = ResnetDecoder()
+        self.resnetencoder = ResnetEncoder()
         self.mse_loss = nn.MSELoss()
 
         # fix the encoder
@@ -138,11 +272,15 @@ class Net(nn.Module):
     def forward(self, content, style, alpha=1.0):
         assert 0 <= alpha <= 1
         style_feats = self.encode_with_intermediate(style)
-        content_feat = self.encode(content)
-        t = adain(content_feat, style_feats[-1])
+        #content_feat = self.encode(content)
+        style_feat = self.resnetencoder(style)
+        content_feat = self.resnetencoder(content)
+        #t = adain(content_feat, style_feats[-1])
+        t = adain(content_feat, style_feat)
         t = alpha * t + (1 - alpha) * content_feat
 
-        g_t = self.decoder(t)
+        #g_t = self.decoder(t)
+        g_t = self.resnetdecoder(t)
         g_t_feats = self.encode_with_intermediate(g_t)
 
         loss_c = self.calc_content_loss(g_t_feats[-1], t)
