@@ -171,7 +171,7 @@ class ResnetEncoder(nn.Module):
         model3 = []
         for i in range(n_blocks):
             model3 += [
-                ResnetBlock(self.ngf * mult * 2, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
+                ResnetBlock(self.ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
                             use_bias=use_bias)]
 
         self.model1 = nn.Sequential(*model1)
@@ -202,11 +202,11 @@ class ResnetDecoder(nn.Module):
         model3 = []
         for i in range(n_blocks):
             model3 += [
-                ResnetBlock(self.ngf * mult * 2, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
+                ResnetBlock(self.ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
                             use_bias=use_bias)]
 
         for i in range(n_downsampling):
-            mult = 2 ** (n_downsampling - i) * 2
+            mult = 2 ** (n_downsampling - i)
             model3 += [nn.ConvTranspose2d(self.ngf * mult, int(self.ngf * mult / 2),
                                           kernel_size=3, stride=2,
                                           padding=1, output_padding=1,
@@ -214,7 +214,7 @@ class ResnetDecoder(nn.Module):
                        norm_layer(int(self.ngf * mult / 2)),
                        nn.ReLU(True)]
         model3 += [nn.ReflectionPad2d(3)]
-        model3 += [nn.Conv2d(self.ngf * 2, self.output_nc, kernel_size=7, padding=0)]
+        model3 += [nn.Conv2d(self.ngf, self.output_nc, kernel_size=7, padding=0)]
         model3 += [nn.Tanh()]
 
         self.model3 = nn.Sequential(*model3)
@@ -272,7 +272,7 @@ class Net(nn.Module):
     def forward(self, content, style, alpha=1.0):
         assert 0 <= alpha <= 1
         style_feats = self.encode_with_intermediate(style)
-        #content_feat = self.encode(content)
+        vgg_content_feat = self.encode(content)
         style_feat = self.resnetencoder(style)
         content_feat = self.resnetencoder(content)
         #t = adain(content_feat, style_feats[-1])
@@ -283,7 +283,7 @@ class Net(nn.Module):
         g_t = self.resnetdecoder(t)
         g_t_feats = self.encode_with_intermediate(g_t)
 
-        loss_c = self.calc_content_loss(g_t_feats[-1], t)
+        loss_c = self.calc_content_loss(g_t_feats[-1], vgg_content_feat)
         loss_s = self.calc_style_loss(g_t_feats[0], style_feats[0])
         for i in range(1, 4):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])

@@ -1,6 +1,9 @@
 *.pth
 *.t7
+*.tar
 output/*
 .idea
 experiments/*
 logs/*
+input/
+__pycache__
