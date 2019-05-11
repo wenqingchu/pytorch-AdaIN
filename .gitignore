@@ -6,4 +6,5 @@ output/*
 experiments/*
 logs/*
 input/
+tmp/
 __pycache__
