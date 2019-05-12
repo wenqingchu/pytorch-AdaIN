@@ -60,8 +60,8 @@ parser.add_argument('--style_dir', type=str,
                     help='Directory path to a batch of style images')
 parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
 parser.add_argument('--decoder', type=str, default='models/decoder.pth')
-parser.add_argument('--resnetencoder', type=str, default='experiments/encoder_iter_80000.pth.tar')
-parser.add_argument('--resnetdecoder', type=str, default='experiments/decoder_iter_80000.pth.tar')
+parser.add_argument('--resnetencoder', type=str, default='experiments_res/encoder_iter_160000.pth.tar')
+parser.add_argument('--resnetdecoder', type=str, default='experiments_res/decoder_iter_160000.pth.tar')
 
 # Additional options
 parser.add_argument('--content_size', type=int, default=512,
