@@ -27,8 +27,10 @@ def test_transform(size, crop):
 def style_transfer(vgg, decoder, content, style, alpha=1.0,
                    interpolation_weights=None):
     assert (0.0 <= alpha <= 1.0)
-    content_f = vgg(content)
-    style_f = vgg(style)
+    #content_f = vgg(content)
+    #style_f = vgg(style)
+    content_f = resnetencoder(content)
+    style_f = resnetencoder(style)
     if interpolation_weights:
         _, C, H, W = content_f.size()
         feat = torch.FloatTensor(1, C, H, W).zero_().to(device)
@@ -39,7 +41,9 @@ def style_transfer(vgg, decoder, content, style, alpha=1.0,
     else:
         feat = adaptive_instance_normalization(content_f, style_f)
     feat = feat * alpha + content_f * (1 - alpha)
-    return decoder(feat)
+    #return decoder(feat)
+    return resnetdecoder(feat)
+
 
 
 parser = argparse.ArgumentParser()
@@ -56,6 +60,8 @@ parser.add_argument('--style_dir', type=str,
                     help='Directory path to a batch of style images')
 parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
 parser.add_argument('--decoder', type=str, default='models/decoder.pth')
+parser.add_argument('--resnetencoder', type=str, default='experiments_res/encoder_iter_160000.pth.tar')
+parser.add_argument('--resnetdecoder', type=str, default='experiments_res/decoder_iter_160000.pth.tar')
 
 # Additional options
 parser.add_argument('--content_size', type=int, default=512,
@@ -118,13 +124,24 @@ if not os.path.exists(args.output):
 decoder = net.decoder
 vgg = net.vgg
 
+network = net.Net(vgg, decoder)
+resnetencoder = network.resnetencoder
+resnetdecoder = network.resnetdecoder
+resnetencoder.eval()
+resnetdecoder.eval()
+
 decoder.eval()
 vgg.eval()
+
+resnetencoder.load_state_dict(torch.load(args.resnetencoder))
+resnetdecoder.load_state_dict(torch.load(args.resnetdecoder))
 
 decoder.load_state_dict(torch.load(args.decoder))
 vgg.load_state_dict(torch.load(args.vgg))
 vgg = nn.Sequential(*list(vgg.children())[:31])
 
+resnetencoder.to(device)
+resnetdecoder.to(device)
 vgg.to(device)
 decoder.to(device)
 
