@@ -10,6 +10,7 @@ from tensorboardX import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
 import numpy as np
+import pdb
 
 import net
 from sampler import InfiniteSamplerWrapper
@@ -61,10 +62,6 @@ parser.add_argument('--content_dir', type=str, required=True,
                     help='Directory path to a batch of content images')
 parser.add_argument('--style_dir', type=str, required=True,
                     help='Directory path to a batch of style images')
-parser.add_argument('--content_seg_dir', type=str, required=True,
-                    help='Directory path to a batch of content seg images')
-parser.add_argument('--style_seg_dir', type=str, required=True,
-                    help='Directory path to a batch of style seg images')
 parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
 
 # training options
@@ -74,7 +71,7 @@ parser.add_argument('--log_dir', default='./logs',
                     help='Directory to save the log')
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--lr_decay', type=float, default=5e-5)
-parser.add_argument('--max_iter', type=int, default=160000)
+parser.add_argument('--max_iter', type=int, default=320000)
 parser.add_argument('--batch_size', type=int, default=8)
 #parser.add_argument('--style_weight', type=float, default=10.0)
 parser.add_argument('--style_weight', type=float, default=500.0)
@@ -121,11 +118,6 @@ optimizer = torch.optim.Adam(network.decoder.parameters(), lr=args.lr)
 
 
 
-cont_seg = Image.open(content_seg_path)
-styl_seg = Image.open(style_seg_path)
-cont_seg = np.asarray(cont_seg)
-styl_seg = np.asarray(styl_seg)
-
 for i in tqdm(range(args.max_iter)):
     adjust_learning_rate(optimizer, iteration_count=i)
     content_images, content_path = next(content_iter)
@@ -133,10 +125,14 @@ for i in tqdm(range(args.max_iter)):
     #content_images = next(content_iter).to(device)
     style_images, style_path = next(style_iter)
     style_images = style_images.to(device)
-    content_seg_path = content_path.replace("content", "content_seg")
-    content_seg_path = content_seg_path.replace("jpg", "png")
-    style_seg_path = style_path.replace(".jpg", "_color.png")
-    style_seg_path = style_seg_path.replace("style", "style_seg")
+    content_seg_path = content_path[0].replace("jpg", "png")
+    content_seg_path = 'input/train_content_seg/' + content_seg_path
+    style_seg_path = style_path[0].replace(".jpg", "_color.png")
+    style_seg_path = 'input/train_style_seg/' + style_seg_path
+    cont_seg = Image.open(content_seg_path)
+    styl_seg = Image.open(style_seg_path)
+    cont_seg = np.asarray(cont_seg)
+    styl_seg = np.asarray(styl_seg)
     loss_c, loss_s = network(content_images, style_images, cont_seg, styl_seg, device)
     loss_c = args.content_weight * loss_c
     loss_s = args.style_weight * loss_s
@@ -152,7 +148,7 @@ for i in tqdm(range(args.max_iter)):
     if (i+1) % 1000 == 0:
         print('iteration: ' + str(i) + '\n')
         print('loss_content: ' + str(loss_c.item()) + '\n')
-        print('loss_style: ' + str(loss_s.item()) + '\n'))
+        print('loss_style: ' + str(loss_s.item()) + '\n')
     if (i + 1) % args.save_model_interval == 0 or (i + 1) == args.max_iter:
         state_dict = net.decoder.state_dict()
         for key in state_dict.keys():
