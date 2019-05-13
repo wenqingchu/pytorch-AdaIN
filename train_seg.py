@@ -9,6 +9,7 @@ from PIL import ImageFile
 from tensorboardX import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
+import numpy as np
 
 import net
 from sampler import InfiniteSamplerWrapper
@@ -38,7 +39,7 @@ class FlatFolderDataset(data.Dataset):
         path = self.paths[index]
         img = Image.open(os.path.join(self.root, path)).convert('RGB')
         img = self.transform(img)
-        return img
+        return img, path
 
     def __len__(self):
         return len(self.paths)
@@ -127,9 +128,16 @@ styl_seg = np.asarray(styl_seg)
 
 for i in tqdm(range(args.max_iter)):
     adjust_learning_rate(optimizer, iteration_count=i)
-    content_images = next(content_iter).to(device)
-    style_images = next(style_iter).to(device)
-    loss_c, loss_s = network(content_images, style_images)
+    content_images, content_path = next(content_iter)
+    content_images = content_images.to(device)
+    #content_images = next(content_iter).to(device)
+    style_images, style_path = next(style_iter)
+    style_images = style_images.to(device)
+    content_seg_path = content_path.replace("content", "content_seg")
+    content_seg_path = content_seg_path.replace("jpg", "png")
+    style_seg_path = style_path.replace(".jpg", "_color.png")
+    style_seg_path = style_seg_path.replace("style", "style_seg")
+    loss_c, loss_s = network(content_images, style_images, cont_seg, styl_seg, device)
     loss_c = args.content_weight * loss_c
     loss_s = args.style_weight * loss_s
     loss = loss_c + loss_s

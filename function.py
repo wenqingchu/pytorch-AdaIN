@@ -76,8 +76,7 @@ def adaptive_instance_normalization_seg(content_feat, style_feat, cont_seg, styl
         else:
             target_feature.index_copy_(1, cont_indi, tmp_target_feature)
     target_feature = target_feature.view_as(content_feat)
-    return target_feature
-
+    return target_feature.unsqueeze(0)
 
 def _calc_feat_flatten_mean_std(feat):
     # takes 3D feat (C, H, W), return mean and std of array within channels
