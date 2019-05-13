@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
+import pdb
 
 def calc_mean_std(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
@@ -15,11 +16,11 @@ def calc_mean_std(feat, eps=1e-5):
 def calc_mean_std_seg(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
     size = feat.size()
-    assert (len(size) == 4)
-    N, C = size[:2]
-    feat_var = feat.view(N, C, -1).var(dim=2) + eps
-    feat_std = feat_var.sqrt().view(N, C, 1, 1)
-    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    assert (len(size) == 2)
+    C = size[0]
+    feat_var = feat.view(C, -1).var(dim=1) + eps
+    feat_std = feat_var.sqrt().view(C, 1)
+    feat_mean = feat.view(C, -1).mean(dim=1).view(C, 1)
     return feat_mean, feat_std
 
 
@@ -35,6 +36,8 @@ def adaptive_instance_normalization(content_feat, style_feat):
 
 def adaptive_instance_normalization_seg(content_feat, style_feat, cont_seg, styl_seg, device):
     assert (content_feat.size()[:2] == style_feat.size()[:2])
+    content_feat = content_feat[0]
+    style_feat = style_feat[0]
     label_set, label_indicator = compute_label_info(cont_seg, styl_seg)
     size = content_feat.size()
     cont_c, cont_h, cont_w = content_feat.size(0), content_feat.size(1), content_feat.size(2)
@@ -46,6 +49,8 @@ def adaptive_instance_normalization_seg(content_feat, style_feat, cont_seg, styl
     t_cont_seg = np.asarray(Image.fromarray(cont_seg).resize((cont_w, cont_h), Image.NEAREST))
     t_styl_seg = np.asarray(Image.fromarray(styl_seg).resize((styl_w, styl_h), Image.NEAREST))
     for l in label_set:
+        if l > 1:
+            break
         if label_indicator[l] == 0:
             continue
         cont_mask = np.where(t_cont_seg.reshape(t_cont_seg.shape[0] * t_cont_seg.shape[1]) == l)
@@ -58,10 +63,10 @@ def adaptive_instance_normalization_seg(content_feat, style_feat, cont_seg, styl
         styl_indi = styl_indi.to(device)
         cFFG = torch.index_select(cont_feat_view, 1, cont_indi)
         sFFG = torch.index_select(styl_feat_view, 1, styl_indi)
-        style_mean, style_std = calc_mean_std(sFFG)
-        content_mean, content_std = calc_mean_std(cFFG)
-        normalized_feat = (content_feat - content_mean.expand(size)) / content_std.expand(size)
-        tmp_target_feature = normalized_feat * style_std.expand(size) + style_mean.expand(size)
+        style_mean, style_std = calc_mean_std_seg(sFFG)
+        content_mean, content_std = calc_mean_std_seg(cFFG)
+        normalized_feat = (cFFG - content_mean) / content_std
+        tmp_target_feature = normalized_feat * style_std + style_mean
         # print(tmp_target_feature.size())
         if torch.__version__ >= "0.4.0":
             new_target_feature = torch.transpose(target_feature, 1, 0)

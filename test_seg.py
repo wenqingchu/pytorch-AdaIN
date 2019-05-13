@@ -14,6 +14,7 @@ from function import adaptive_instance_normalization
 from function import adaptive_instance_normalization_seg
 from function import coral
 
+import pdb
 
 def test_transform(size, crop):
     transform_list = []
@@ -40,7 +41,7 @@ def style_transfer(vgg, decoder, content, style, cont_seg, styl_seg, device, alp
         content_f = content_f[0:1]
     else:
         feat = adaptive_instance_normalization_seg(content_f, style_f, cont_seg, styl_seg, device)
-    feat = feat * alpha + content_f * (1 - alpha)
+    feat = feat.unsqueeze(0) * alpha + content_f * (1 - alpha)
     return decoder(feat)
 
 
@@ -56,10 +57,10 @@ parser.add_argument('--style', type=str,
                     interpolation or spatial control')
 parser.add_argument('--style_dir', type=str,
                     help='Directory path to a batch of style images')
-parser.add_argument('--content_seg_dir', type=str, required=True,
-                    help='Directory path to a batch of content seg images')
-parser.add_argument('--style_seg_dir', type=str, required=True,
-                    help='Directory path to a batch of style seg images')
+#parser.add_argument('--content_seg_dir', type=str, required=True,
+#                    help='Directory path to a batch of content seg images')
+#parser.add_argument('--style_seg_dir', type=str, required=True,
+#                    help='Directory path to a batch of style seg images')
 parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
 parser.add_argument('--decoder', type=str, default='models/decoder.pth')
 
@@ -103,8 +104,8 @@ if args.content:
 else:
     content_paths = [os.path.join(args.content_dir, f) for f in
                      os.listdir(args.content_dir)]
-    content_seg_paths = [os.path.join(args.content_seg_dir, f) for f in
-                     os.listdir(args.content_seg_dir)]
+    #content_seg_paths = [os.path.join(args.content_seg_dir, f) for f in
+    #                 os.listdir(args.content_seg_dir)]
 
 if args.style:
     style_paths = args.style.split(',')
@@ -119,8 +120,8 @@ if args.style:
 else:
     style_paths = [os.path.join(args.style_dir, f) for f in
                    os.listdir(args.style_dir)]
-    style_seg_paths = [os.path.join(args.style_seg_dir, f) for f in
-                   os.listdir(args.style_seg_dir)]
+    #style_seg_paths = [os.path.join(args.style_seg_dir, f) for f in
+    #               os.listdir(args.style_seg_dir)]
 
 if not os.path.exists(args.output):
     os.mkdir(args.output)
@@ -160,10 +161,10 @@ for content_path in content_paths:
         for style_path in style_paths:
             content = content_tf(Image.open(content_path))
             style = style_tf(Image.open(style_path))
-            content_seg = content_tf(Image.open(content_path.replace("", "")))
-            style_seg = style_tf(Image.open(style_path.replace("","")))
-            content_seg_path = content_path.replace("", "")
-            style_seg_path = style_path.replace("", "")
+            content_seg_path = content_path.replace("content", "content_seg")
+            content_seg_path = content_seg_path.replace("jpg", "png")
+            style_seg_path = style_path.replace(".jpg", "_color.png")
+            style_seg_path = style_seg_path.replace("style", "style_seg")
             cont_seg = Image.open(content_seg_path)
             styl_seg = Image.open(style_seg_path)
             cont_seg = np.asarray(cont_seg)
